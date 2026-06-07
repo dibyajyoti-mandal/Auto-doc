@@ -1,0 +1,28 @@
+name: Central Docs Sync Dispatcher
+
+on:
+  workflow_call:
+    inputs:
+      repo_name:
+        required: true
+        type: string
+        description: "The name of the upstream repository triggering the sync"
+      pr_number:
+        required: true
+        type: string
+        description: "The pull request number"
+      pr_title:
+        required: true
+        type: string
+        description: "The title of the merged pull request"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log Sync Initiation
+        run: |
+          echo "Doc sync initiated"
+          echo "Triggered by repository: ${{ inputs.repo_name }}"
+          echo "PR Number: ${{ inputs.pr_number }}"
+          echo "PR Title: ${{ inputs.pr_title }}"
