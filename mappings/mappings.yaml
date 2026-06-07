@@ -1,0 +1,11 @@
+mappings:
+  dibyajyoti-mandal/krknctl:
+    cmd/:
+      target: content/en/docs/reference/cli.md
+      change_type: cli_flag
+    pkg/scenario/:
+      target: content/en/docs/scenarios/_index.md
+      change_type: new_scenario
+    pkg/config/:
+      target: content/en/docs/reference/configuration.md
+      change_type: config_field
