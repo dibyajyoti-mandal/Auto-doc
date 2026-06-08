@@ -29,15 +29,6 @@ class MappingRegistry:
         """
         Resolve a source file path from an upstream repo to its target
         documentation page configuration.
-
-        Args:
-            repo:        Full repo name, e.g. "dibyajyoti-mandal/krknctl"
-            source_path: File path from the unified diff, e.g. "cmd/run.go"
-
-        Returns:
-            A dict with at minimum a "target" key (the relative .md path
-            inside the website repo), and any additional config from the
-            registry (e.g. "change_type"). Returns None if no match is found.
         """
         repo_mappings = self.mappings.get(repo)
         if not repo_mappings:

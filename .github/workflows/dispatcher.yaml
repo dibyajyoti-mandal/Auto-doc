@@ -1,4 +1,4 @@
-name: Central Docs Sync Dispatcher
+name: Docs Sync Dispatcher
 
 on:
   workflow_call:
@@ -6,23 +6,60 @@ on:
       repo_name:
         required: true
         type: string
-        description: "The name of the upstream repository triggering the sync"
       pr_number:
         required: true
         type: string
-        description: "The pull request number"
       pr_title:
         required: true
         type: string
-        description: "The title of the merged pull request"
+    secrets:
+      BOT_TOKEN:
+        required: true
 
 jobs:
-  sync:
+  dispatch:
     runs-on: ubuntu-latest
     steps:
-      - name: Log Sync Initiation
+      - name: Checkout Auto-doc
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.BOT_TOKEN }}
+
+      - name: Fetch PR diff
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          REPO: ${{ inputs.repo_name }}
+          PR_NUMBER: ${{ inputs.pr_number }}
         run: |
-          echo "Doc sync initiated"
-          echo "Triggered by repository: ${{ inputs.repo_name }}"
-          echo "PR Number: ${{ inputs.pr_number }}"
-          echo "PR Title: ${{ inputs.pr_title }}"
+          curl -s \
+            -H "Authorization: Bearer $BOT_TOKEN" \
+            -H "Accept: application/vnd.github.v3.diff" \
+            "https://api.github.com/repos/$REPO/pulls/$PR_NUMBER" \
+            > diff.txt
+          echo "Diff fetched. Lines: $(wc -l < diff.txt)"
+
+      - name: Build metadata.json
+        env:
+          REPO: ${{ inputs.repo_name }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          PR_TITLE: ${{ inputs.pr_title }}
+        run: |
+          DIFF_CONTENT=$(cat diff.txt | python3 -c "
+          import sys, json
+          print(json.dumps(sys.stdin.read()))
+          ")
+          echo "{
+            \"repo\": \"$REPO\",
+            \"pr_number\": \"$PR_NUMBER\",
+            \"pr_title\": \"$PR_TITLE\",
+            \"diff\": $DIFF_CONTENT
+          }" > metadata.json
+          echo "=== metadata.json preview ==="
+          cat metadata.json | python3 -c "
+          import sys, json
+          d = json.load(sys.stdin)
+          print('repo:', d['repo'])
+          print('pr_number:', d['pr_number'])
+          print('pr_title:', d['pr_title'])
+          print('diff length (chars):', len(d['diff']))
+          "
