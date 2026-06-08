@@ -44,22 +44,22 @@ jobs:
           PR_NUMBER: ${{ inputs.pr_number }}
           PR_TITLE: ${{ inputs.pr_title }}
         run: |
-          DIFF_CONTENT=$(cat diff.txt | python3 -c "
-          import sys, json
-          print(json.dumps(sys.stdin.read()))
-          ")
-          echo "{
-            \"repo\": \"$REPO\",
-            \"pr_number\": \"$PR_NUMBER\",
-            \"pr_title\": \"$PR_TITLE\",
-            \"diff\": $DIFF_CONTENT
-          }" > metadata.json
-          echo "=== metadata.json preview ==="
-          cat metadata.json | python3 -c "
-          import sys, json
-          d = json.load(sys.stdin)
-          print('repo:', d['repo'])
-          print('pr_number:', d['pr_number'])
-          print('pr_title:', d['pr_title'])
-          print('diff length (chars):', len(d['diff']))
-          "
+          python3 - <<'EOF'
+          import json, os
+
+          data = {
+              "repo":      os.environ["REPO"],
+              "pr_number": os.environ["PR_NUMBER"],
+              "pr_title":  os.environ["PR_TITLE"],
+              "diff":      open("diff.txt").read(),
+          }
+
+          with open("metadata.json", "w") as f:
+              json.dump(data, f)
+
+          print("=== metadata.json preview ===")
+          print("repo:",                data["repo"])
+          print("pr_number:",           data["pr_number"])
+          print("pr_title:",            data["pr_title"])
+          print("diff length (chars):", len(data["diff"]))
+          EOF
