@@ -23,6 +23,7 @@ jobs:
       - name: Checkout Auto-doc
         uses: actions/checkout@v4
         with:
+          repository: dibyajyoti-mandal/Auto-doc
           token: ${{ secrets.BOT_TOKEN }}
 
       - name: Fetch PR diff
