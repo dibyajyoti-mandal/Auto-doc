@@ -1,11 +1,10 @@
 import json
 import os
 import time
-from pathlib import Path
 
-import anthropic
+from groq import Groq
 
-from generator.fetcher import fetch_target_page
+from llm.fetcher import fetch_target_page
 
 
 WEBSITE_REPO = "dibyajyoti-mandal/website"
@@ -49,16 +48,18 @@ Update the documentation page above to reflect these changes.
 Return only the JSON object described in your instructions."""
 
 
-def call_llm_with_retry(client: anthropic.Anthropic, user_prompt: str, retries: int = 3) -> str:
+def call_llm_with_retry(client: Groq, user_prompt: str, retries: int = 3) -> str:
     for attempt in range(retries):
         try:
-            response = client.messages.create(
-                model="claude-opus-4-5",
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
                 max_tokens=4096,
-                system=SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": user_prompt}],
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user",   "content": user_prompt},
+                ],
             )
-            return response.content[0].text
+            return response.choices[0].message.content
         except Exception as e:
             if attempt < retries - 1:
                 wait = 2 ** attempt
@@ -73,7 +74,7 @@ def main():
     with open(PAYLOAD_PATH) as f:
         payload = json.load(f)
 
-    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    client = Groq(api_key=os.environ["GROQ_API_KEY"])
     bot_token = os.environ["BOT_TOKEN"]
 
     all_generated = []
