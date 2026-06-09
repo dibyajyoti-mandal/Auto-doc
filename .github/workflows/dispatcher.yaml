@@ -15,6 +15,8 @@ on:
     secrets:
       BOT_TOKEN:
         required: true
+      GROQ_API_KEY:
+        required: true
 
 jobs:
   dispatch:
@@ -82,4 +84,18 @@ jobs:
             cat change_payload.json
           else
             echo "No documentation-relevant changes detected."
+          fi
+      
+      - name: Run LLM generator
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: python3 -m llm.llm_generator
+
+      - name: Print generated docs
+        run: |
+          if [ -f generated_docs.json ]; then
+            cat generated_docs.json
+          else
+            echo "No docs were generated."
           fi
