@@ -63,3 +63,22 @@ jobs:
           print("pr_title:",            data["pr_title"])
           print("diff length (chars):", len(data["diff"]))
           EOF
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run change analyzer
+        run: python3 -m analyzer.main
+
+      - name: Print change payload
+        run: |
+          if [ -f change_payload.json ]; then
+            cat change_payload.json
+          else
+            echo "No documentation-relevant changes detected."
+          fi
