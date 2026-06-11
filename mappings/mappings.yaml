@@ -1,7 +1,7 @@
 mappings:
   dibyajyoti-mandal/krknctl:
     cmd/:
-      target: content/en/docs/reference/cli.md
+      target: content/en/docs/krknctl/_index.md
       change_type: cli_flag
     pkg/scenario/:
       target: content/en/docs/scenarios/_index.md
