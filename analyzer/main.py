@@ -23,8 +23,8 @@ def main():
         metadata = json.load(f)
 
     repo = metadata["repo"]
-    commit_sha = metadata["pr_number"]      # holds sha in push mode
-    commit_message = metadata["pr_title"]   # holds commit message in push mode
+    pr_number = metadata["pr_number"]
+    pr_title  = metadata["pr_title"]
     diff = metadata["diff"]
 
     # 2. Noise filter
@@ -68,8 +68,8 @@ def main():
     # 6. Write change_payload.json
     payload = {
         "repo": repo,
-        "commit_sha": commit_sha,
-        "commit_message": commit_message,
+        "pr_number": pr_number,
+        "pr_title": pr_title,
         "changes": changes,
     }
 
