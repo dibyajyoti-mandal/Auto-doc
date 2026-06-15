@@ -8,4 +8,5 @@ tree-sitter-go==0.21.0
 
 # Testing
 pytest==9.0.2
+pytest-mock
 
