@@ -112,7 +112,7 @@ def run():
     print(f"Command: {command}, Argument: {argument}")
 
     # 3. Acknowledge the command
-    pr.create_issue_comment(f"⚙️ Processing `@krkn-docs-bot {command} {argument}`..")
+    pr.create_issue_comment(f"⚙️ Processing `{command}` command with argument: `{argument or 'none'}`…")
 
     # 4. Get the changed files from the PR
     pr_files = list(pr.get_files())
