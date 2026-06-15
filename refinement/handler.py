@@ -4,7 +4,7 @@ import re
 import time
 import base64
 
-import anthropic
+from groq import Groq
 from github import Github, GithubException
 
 WEBSITE_REPO = "dibyajyoti-mandal/website"
@@ -63,21 +63,23 @@ def build_refinement_prompt(existing_content: str, command: str, argument: str) 
 Apply the instruction and return the JSON object."""
 
 
-def call_llm(client: anthropic.Anthropic, prompt: str, retries: int = 3) -> dict:
+def call_llm(client: Groq, prompt: str, retries: int = 3) -> dict:
     for attempt in range(retries):
         try:
-            response = client.messages.create(
-                model="claude-sonnet-4-6",
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
                 max_tokens=4096,
-                system=SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": prompt}],
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user",   "content": prompt},
+                ],
             )
-            raw = response.content[0].text
+            raw = response.choices[0].message.content
             try:
-                return json.loads(raw)
+                return json.loads(raw, strict=False)
             except json.JSONDecodeError:
-                cleaned = raw.strip().removeprefix("```json").removesuffix("```").strip()
-                return json.loads(cleaned)
+                cleaned = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+                return json.loads(cleaned, strict=False)
         except Exception as e:
             if attempt < retries - 1:
                 time.sleep(2 ** attempt)
@@ -118,7 +120,7 @@ def run():
         pr.create_issue_comment("❌ No files found in this PR.")
         return
 
-    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    client = Groq(api_key=os.environ["GROQ_API_KEY"])
 
     for pr_file in pr_files:
         path = pr_file.filename
