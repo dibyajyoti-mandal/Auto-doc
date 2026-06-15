@@ -90,7 +90,12 @@ jobs:
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-        run: python3 -m llm.llm_generator
+        run: |
+          if [ ! -f change_payload.json ]; then
+            echo "No change payload found — skipping LLM generation."
+            exit 0
+          fi
+          python3 -m llm.llm_generator
 
       - name: Print generated docs
         run: |
@@ -99,3 +104,13 @@ jobs:
           else
             echo "No docs were generated."
           fi
+
+      - name: Run PR creator
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: |
+          if [ ! -f generated_docs.json ]; then
+            echo "No generated docs found — skipping PR creation."
+            exit 0
+          fi
+          python3 -m pr_creator.creator
