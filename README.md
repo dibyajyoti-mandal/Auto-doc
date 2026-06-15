@@ -265,20 +265,6 @@ pytest tests/ -v
 
 The `tests/conftest.py` adds the project root to `sys.path` automatically, so no editable install is needed.
 
-**Test coverage by module:**
-
-| Test file | Module tested |
-|---|---|
-| `test_noise_filter.py` | `analyzer/noise_filter.py` |
-| `test_registry.py` | `utils/register.py` |
-| `test_cli_classifier.py` | `analyzer/classifiers/cli.py` |
-| `test_readme_classifier.py` | `analyzer/classifiers/readme.py` |
-| `test_fetcher.py` | `llm/fetcher.py` |
-| `test_llm_generator.py` | `llm/llm_generator.py` |
-| `test_refinement_handler.py` | `refinement/handler.py` |
-
-All external calls (HTTP, GitHub API, Groq API) are mocked — tests run fully offline.
-
 ---
 
 ## Contributor Guidelines
@@ -316,24 +302,3 @@ After creating the file:
 
 The `MappingRegistry` resolves by prefix match. Each entry under a repo key maps a **path prefix** to a `target` doc page and a `change_type`. You can add any number of prefixes per repo.
 
-### Code style
-
-- Python 3.11+, type hints throughout
-- No broad `except Exception` — always catch the specific exception or re-raise
-- All LLM calls must use `call_llm_with_retry` (or equivalent) with exponential backoff
-- All GitHub API writes must check idempotency before acting
-
-### Pull Request checklist
-
-- [ ] New code has unit tests with mocked external calls
-- [ ] `mappings/mappings.yaml` updated if a new source path is tracked
-- [ ] `requirements.txt` updated if a new dependency is added
-- [ ] `pytest tests/ -v` passes locally
-- [ ] No secrets or tokens committed
-
-### Reporting issues
-
-Open an issue in this repo describing:
-- Which upstream PR triggered the bot
-- Which step in the dispatcher failed (attach the GitHub Actions log)
-- Expected vs actual documentation output
