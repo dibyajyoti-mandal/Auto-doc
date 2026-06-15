@@ -73,6 +73,7 @@ No documentation drift. No manual copy-paste. Human-validated before merge.
 │  Reviewer approves → merges draft PR                                    │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+<img width="1457" height="900" alt="Screenshot 2026-06-15 213849" src="https://github.com/user-attachments/assets/53a0c650-9f58-432c-a5a5-57f2099a424e" />
 
 ---
 
