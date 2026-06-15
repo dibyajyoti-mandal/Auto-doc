@@ -1,1 +1,339 @@
-# Auto-doc
+# Auto-doc — Automated Documentation Sync Bot
+
+> Automatically keeps the [krkn-chaos website](https://github.com/krkn-chaos/website) in sync with upstream code changes through a GitHub Actions pipeline powered by an LLM.
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [How It Works](#how-it-works)
+- [Repository Structure](#repository-structure)
+- [End-to-End Workflow](#end-to-end-workflow)
+- [Mapping Registry](#mapping-registry)
+- [Bot Commands (Refinement Loop)](#bot-commands-refinement-loop)
+- [Setup Guide](#setup-guide)
+- [Running Tests](#running-tests)
+- [Contributor Guidelines](#contributor-guidelines)
+
+---
+
+## Overview
+
+Auto-doc is a centralised automation bot that:
+
+1. **Triggers** on every merged PR in upstream repos (e.g. `krknctl`)
+2. **Analyses** the diff to classify documentation-relevant changes (CLI flag additions/removals, new commands, README edits)
+3. **Generates** updated Hugo/Docsy markdown pages using an LLM (Groq `llama-3.3-70b-versatile`)
+4. **Opens a draft PR** on the website repo for human review
+5. **Responds to reviewer commands** in PR comments to iteratively refine the content
+
+No documentation drift. No manual copy-paste. Human-validated before merge.
+
+---
+
+## How It Works
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Upstream repo (e.g. krknctl)                                           │
+│                                                                         │
+│  PR merged → doc-sync-trigger.yaml fires                                │
+│       │                                                                 │
+│       │  workflow_call (repo, pr_number, pr_title)                      │
+│       ▼                                                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│  Auto-doc repo (this repo)  — dispatcher.yaml                          │
+│                                                                         │
+│  1. Checkout Auto-doc                                                   │
+│  2. Fetch PR diff  (GitHub API)                                         │
+│  3. Build metadata.json                                                 │
+│  4. Run change analyzer  → change_payload.json                          │
+│     ├── noise_filter.py  (skip test/vendor/CI files)                    │
+│     ├── classifiers/cli.py  (AST parse Go Cobra flags)                  │
+│     └── classifiers/readme.py  (detect .md changes)                    │
+│  5. Run LLM generator  → generated_docs.json                            │
+│     ├── llm/fetcher.py  (fetch current page from website repo)          │
+│     └── llm/llm_generator.py  (Groq API call with retry)                │
+│  6. Run PR creator                                                      │
+│     └── pr_creator/creator.py  (open draft PR on website repo)          │
+├─────────────────────────────────────────────────────────────────────────┤
+│  Website repo (dibyajyoti-mandal/website)                               │
+│                                                                         │
+│  Draft PR opened with label: auto-docs                                  │
+│       │                                                                 │
+│       │  Reviewer posts @krkn-docs-bot command                          │
+│       ▼                                                                 │
+│  refinement.yaml fires → refinement/handler.py                          │
+│     ├── Parse command                                                   │
+│     ├── Fetch PR branch content                                         │
+│     ├── Call LLM with refinement instruction                            │
+│     └── Push updated content + reply on PR                              │
+│                                                                         │
+│  Reviewer approves → merges draft PR                                    │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+---
+
+## End-to-End Workflow
+
+### Step 1 — Trigger (upstream repo)
+
+Each upstream repo (e.g. `krknctl`) has a trigger workflow at `.github/workflows/doc-sync-trigger.yaml`:
+
+```yaml
+on:
+  pull_request_target:
+    types: [closed]
+
+jobs:
+  trigger:
+    if: github.event.pull_request.merged == true
+    uses: dibyajyoti-mandal/Auto-doc/.github/workflows/dispatcher.yaml@main
+    with:
+      repo_name: ${{ github.repository }}
+      pr_number: ${{ github.event.pull_request.number }}
+      pr_title: ${{ github.event.pull_request.title }}
+    secrets:
+      BOT_TOKEN: ${{ secrets.DOCS_SYNC_BOT_TOKEN }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+```
+
+### Step 2 — Dispatcher (this repo)
+
+`dispatcher.yaml` runs on the `Auto-doc` runner and executes sequentially:
+
+| Step | Script | Output |
+|---|---|---|
+| Fetch diff | `curl` GitHub API | `diff.txt` |
+| Build metadata | inline Python | `metadata.json` |
+| Run analyzer | `python3 -m analyzer.main` | `change_payload.json` |
+| Run LLM generator | `python3 -m llm.llm_generator` | `generated_docs.json` |
+| Create draft PR | `python3 -m pr_creator.creator` | Draft PR on website |
+
+Both the LLM and PR creator steps are **guarded** — they gracefully skip if the previous step produced no output (i.e. no doc-relevant changes were found).
+
+### Step 3 — Refinement (website repo)
+
+The website repo has `.github/workflows/refinement.yaml` that triggers on `issue_comment` events. Reviewers can refine the draft PR content using bot commands (see below).
+
+---
+
+## Mapping Registry
+
+`mappings/mappings.yaml` controls which source file paths map to which documentation pages.
+
+```yaml
+mappings:
+  dibyajyoti-mandal/krknctl:
+    cmd/:
+      target: content/en/docs/krknctl/_index.md
+      change_type: cli_flag
+    pkg/scenario/:
+      target: content/en/docs/scenarios/_index.md
+      change_type: new_scenario
+    pkg/config/:
+      target: content/en/docs/reference/configuration.md
+      change_type: config_field
+```
+
+**To add a new upstream repo**, append a new top-level key under `mappings:` with its source path prefixes and target doc pages. No code changes needed.
+
+**Resolution logic**: The registry checks whether a changed file's path *starts with* any registered prefix. The first match wins. If no prefix matches, the change is skipped with a warning.
+
+---
+
+## Bot Commands (Refinement Loop)
+
+Once a draft PR is open on the website repo, reviewers can post commands as PR comments:
+
+| Command | Effect |
+|---|---|
+| `@krkn-docs-bot expand <section>` | Expand the named section with more detail |
+| `@krkn-docs-bot fix <instruction>` | Apply a specific correction verbatim |
+| `@krkn-docs-bot regenerate` | Regenerate the entire page from scratch |
+| `@krkn-docs-bot add example` | Append a practical usage example |
+
+The bot will acknowledge the command, call the LLM, push the updated content to the PR branch, and reply with a confirmation. Commands are **case-insensitive**.
+
+> **Important**: Do **not** include `@krkn-docs-bot` in any manual comments unrelated to a command — it will trigger the refinement workflow unnecessarily.
+
+---
+
+## Setup Guide
+
+### Prerequisites
+
+- Python 3.11+
+- A GitHub PAT with `repo` and `workflow` scopes
+- A [Groq API key](https://console.groq.com)
+
+### 1. Fork / clone the repos
+
+```
+dibyajyoti-mandal/Auto-doc   ← this repo (bot logic)
+dibyajyoti-mandal/krknctl    ← upstream source repo
+dibyajyoti-mandal/website    ← documentation target repo
+```
+
+### 2. Set repository secrets
+
+**In `krknctl`** (upstream trigger repo):
+
+| Secret | Value |
+|---|---|
+| `DOCS_SYNC_BOT_TOKEN` | GitHub PAT |
+| `GROQ_API_KEY` | Groq API key |
+
+**In `website`** (documentation target repo):
+
+| Secret | Value |
+|---|---|
+| `DOCS_SYNC_BOT_TOKEN` | GitHub PAT |
+| `GROQ_API_KEY` | Groq API key |
+
+### 3. Add the trigger workflow to each upstream repo
+
+Create `.github/workflows/doc-sync-trigger.yaml` in each upstream repo (see Step 1 above).
+
+### 4. Add the refinement workflow to the website repo
+
+Create `.github/workflows/refinement.yaml` in the website repo:
+
+```yaml
+name: Docs Bot Refinement
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  refine:
+    if: |
+      github.event.issue.pull_request != null &&
+      contains(github.event.comment.body, '@krkn-docs-bot') &&
+      !startsWith(github.event.comment.body, '⚙️') &&
+      !startsWith(github.event.comment.body, '✅') &&
+      !startsWith(github.event.comment.body, '❌')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Auto-doc
+        uses: actions/checkout@v4
+        with:
+          repository: dibyajyoti-mandal/Auto-doc
+          token: ${{ secrets.DOCS_SYNC_BOT_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run refinement handler
+        env:
+          BOT_TOKEN: ${{ secrets.DOCS_SYNC_BOT_TOKEN }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: python3 -m refinement.handler
+```
+
+### 5. Update `mappings/mappings.yaml`
+
+Add entries for each upstream repo and source directory you want to track.
+
+### 6. Install dependencies locally
+
+```bash
+pip install -r requirements.txt
+```
+
+---
+
+## Running Tests
+
+```bash
+# From the project root
+pytest tests/ -v
+```
+
+The `tests/conftest.py` adds the project root to `sys.path` automatically, so no editable install is needed.
+
+**Test coverage by module:**
+
+| Test file | Module tested |
+|---|---|
+| `test_noise_filter.py` | `analyzer/noise_filter.py` |
+| `test_registry.py` | `utils/register.py` |
+| `test_cli_classifier.py` | `analyzer/classifiers/cli.py` |
+| `test_readme_classifier.py` | `analyzer/classifiers/readme.py` |
+| `test_fetcher.py` | `llm/fetcher.py` |
+| `test_llm_generator.py` | `llm/llm_generator.py` |
+| `test_refinement_handler.py` | `refinement/handler.py` |
+
+All external calls (HTTP, GitHub API, Groq API) are mocked — tests run fully offline.
+
+---
+
+## Contributor Guidelines
+
+### Adding support for a new upstream repo
+
+1. Add an entry to `mappings/mappings.yaml` with the repo name and source-to-doc mappings.
+2. Add the trigger workflow to that repo's `.github/workflows/`.
+3. Add `DOCS_SYNC_BOT_TOKEN` and `GROQ_API_KEY` to that repo's secrets.
+4. No code changes needed in `Auto-doc` unless the new repo uses a different language or framework.
+
+### Adding a new classifier
+
+Classifiers live in `analyzer/classifiers/`. Each classifier is a Python module with a single public function:
+
+```python
+def classify(diff: str) -> dict | None:
+    """
+    Returns a classification payload dict if relevant changes found,
+    or None if the diff contains nothing relevant.
+
+    The returned dict must include:
+      - "type": str           — change type identifier
+      - "source_paths": list  — list of changed source file paths
+    """
+```
+
+After creating the file:
+
+1. Export it in `analyzer/classifiers/__init__.py`
+2. Add it to the `classifiers` list in `analyzer/main.py`
+3. Write tests in `tests/test_<name>_classifier.py`
+
+### Extending the mapping registry
+
+The `MappingRegistry` resolves by prefix match. Each entry under a repo key maps a **path prefix** to a `target` doc page and a `change_type`. You can add any number of prefixes per repo.
+
+### Code style
+
+- Python 3.11+, type hints throughout
+- No broad `except Exception` — always catch the specific exception or re-raise
+- All LLM calls must use `call_llm_with_retry` (or equivalent) with exponential backoff
+- All GitHub API writes must check idempotency before acting
+
+### Pull Request checklist
+
+- [ ] New code has unit tests with mocked external calls
+- [ ] `mappings/mappings.yaml` updated if a new source path is tracked
+- [ ] `requirements.txt` updated if a new dependency is added
+- [ ] `pytest tests/ -v` passes locally
+- [ ] No secrets or tokens committed
+
+### Reporting issues
+
+Open an issue in this repo describing:
+- Which upstream PR triggered the bot
+- Which step in the dispatcher failed (attach the GitHub Actions log)
+- Expected vs actual documentation output
