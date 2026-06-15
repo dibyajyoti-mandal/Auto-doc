@@ -106,11 +106,22 @@ def main():
 
         # 5. Parse response
         try:
-            result = json.loads(raw_response)
+            result = json.loads(raw_response, strict=False)
         except json.JSONDecodeError:
-            # strip accidental markdown fences if present
-            cleaned = raw_response.strip().removeprefix("```json").removesuffix("```").strip()
-            result = json.loads(cleaned)
+            # strip accidental markdown fences (with or without language tag)
+            cleaned = (
+                raw_response.strip()
+                .removeprefix("```json")
+                .removeprefix("```")
+                .removesuffix("```")
+                .strip()
+            )
+            try:
+                result = json.loads(cleaned, strict=False)
+            except json.JSONDecodeError as e:
+                print(f"ERROR: Could not parse LLM response as JSON: {e}")
+                print(f"Raw response was:\n{raw_response[:500]}")
+                raise
 
         result["target_page"] = target_page
         all_generated.append(result)
