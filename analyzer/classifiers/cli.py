@@ -3,13 +3,14 @@ from analyzer.noise_filter import extract_changed_files
 import tree_sitter_go as tsg
 from tree_sitter import Language, Parser
 
-GO_LANGUAGE = Language(tsg.language())
+GO_LANGUAGE = Language(tsg.language(), "go")
 
 COMMAND_USE_PATTERN = re.compile(r'Use:\s*"([^"]+)"')
 
 
 def _build_parser() -> Parser:
-    parser = Parser(GO_LANGUAGE)
+    parser = Parser()
+    parser.set_language(GO_LANGUAGE)
     return parser
 
 
